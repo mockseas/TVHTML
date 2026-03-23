@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>BBC Programme Slide Tool</title>
+<style>
+body{ margin:0; background:#000; display:flex; font-family:"Gill Sans MT", sans-serif; color:white; height:100vh; overflow:hidden; }
+#editor{ width:320px; background:#111; padding:15px; height:100vh; overflow-y:auto; box-sizing:border-box; border-right: 1px solid #333; }
+label{ display:block; margin-top:10px; color:#aaa; font-size:0.8em; }
+input, select{ width:100%; padding:8px; margin-bottom:10px; background:#222; border:1px solid #444; color:white; box-sizing:border-box; }
+.file-btn{ background:#444; color:white; padding:8px; text-align:center; cursor:pointer; display:block; margin-bottom:10px; border:1px solid #555; font-weight:bold; }
+.file-btn:hover{ background:#555; }
+.frame{ flex:1; display:grid; place-items:center; background:#000; }
+canvas{ width:100%; max-width:1200px; aspect-ratio:1400/1080; border:1px solid #222; }
+#status{ font-size: 0.8em; padding: 10px; margin-top: 5px; border-radius: 3px; text-align: center; font-weight:bold; }
+.ok{ background: #050; color: #afa; }
+.err{ background: #500; color: #faa; }
+</style>
+</head>
+<body>
+
+<div id="editor">
+<h2>BBC Slide Tool</h2>
+
+<label>Upload Background</label>
+<label class="file-btn">
+    CHOOSE IMAGE
+    <input type="file" id="bgInput" accept="image/*" style="display:none" onchange="uploadBG(this)">
+</label>
+
+<label>Programme Title</label>
+<input id="title" value="EUROVISION SONG CONTEST 2001" oninput="draw()">
+
+<label>Channel Logo</label>
+<select id="logoSelect" onchange="loadLogo(this.value)">
+  <option value="bbcone.png">BBC One</option>
+  <option value="bbctwo.png">BBC Two</option>
+  <option value="bbcchoice.png">BBC Choice</option>
+  <option value="bbcknowledge.png">BBC Knowledge</option>
+  <option value="bbcworld.png">BBC World</option>
+</select>
+<div id="status">Checking logo...</div>
+</div>
+
+<div class="frame">
+<canvas id="canvas" width="1400" height="1080"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const statusDiv = document.getElementById("status");
+
+let bg = new Image();
+bg.src = "weakestlink.jpg"; 
+bg.onload = draw;
+
+let logo = new Image();
+let logoLoaded = false;
+
+function uploadBG(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      bg = new Image();
+      bg.onload = draw;
+      bg.src = e.target.result;
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function loadLogo(src){
+  logoLoaded = false;
+  logo = new Image();
+  logo.onload = () => { 
+    logoLoaded = true; 
+    statusDiv.innerText = "Logo Loaded Successfully";
+    statusDiv.className = "ok";
+    draw(); 
+  };
+  logo.onerror = () => { 
+    logoLoaded = false; 
+    statusDiv.innerText = "File Not Found: " + src;
+    statusDiv.className = "err";
+    draw(); 
+  };
+  logo.src = src;
+}
+
+// Initial load
+loadLogo(document.getElementById("logoSelect").value);
+
+function draw(){
+  ctx.clearRect(0,0,1400,1080);
+  
+  if(bg.complete) {
+    ctx.drawImage(bg,0,0,1400,1080);
+  }
+
+  const grad = ctx.createLinearGradient(0, 600, 0, 1080);
+  grad.addColorStop(0, "rgba(0, 0, 0, 0)");
+  grad.addColorStop(1, "rgba(0, 0, 0, 0.85)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 600, 1400, 480);
+
+  ctx.textAlign="center";
+  ctx.fillStyle="white";
+  let fullText = document.getElementById("title").value.toUpperCase();
+  
+  if (fullText.length > 17) {
+    ctx.font="bold 54pt 'Gill Sans MT'";
+    let words = fullText.split(" ");
+    let mid = Math.ceil(words.length / 2);
+    let line1 = words.slice(0, mid).join(" ");
+    let line2 = words.slice(mid).join(" ");
+    
+    ctx.fillText(line1, 700, 810);
+    ctx.fillText(line2, 700, 890);
+  } else {
+    ctx.font="bold 72pt 'Gill Sans MT'";
+    ctx.fillText(fullText, 700, 880);
+  }
+
+  if(logoLoaded){
+    ctx.drawImage(logo, 0, -20, 1400, 1080);
+  }
+}
+</script>
+</body>
+</html>
