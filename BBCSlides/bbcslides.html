@@ -4,7 +4,14 @@
 <meta charset="UTF-8">
 <title>BBC Programme Slide Tool</title>
 <style>
-body{ margin:0; background:#000; display:flex; font-family:"Gill Sans MT", sans-serif; color:white; height:100vh; overflow:hidden; }
+/* Linking your specific font files */
+@font-face {
+    font-family: 'BBCGillSans';
+    src: url('GLSNECB.woff2') format('woff2'); /* Using the Extra Bold file for the title */
+    font-weight: bold;
+}
+
+body{ margin:0; background:#000; display:flex; font-family: "BBCGillSans", "Gill Sans MT", sans-serif; color:white; height:100vh; overflow:hidden; }
 #editor{ width:320px; background:#111; padding:15px; height:100vh; overflow-y:auto; box-sizing:border-box; border-right: 1px solid #333; }
 label{ display:block; margin-top:10px; color:#aaa; font-size:0.8em; }
 input, select{ width:100%; padding:8px; margin-bottom:10px; background:#222; border:1px solid #444; color:white; box-sizing:border-box; }
@@ -58,6 +65,11 @@ bg.onload = draw;
 let logo = new Image();
 let logoLoaded = false;
 
+// Ensure font is loaded before drawing
+document.fonts.ready.then(() => {
+    draw();
+});
+
 function uploadBG(input) {
   if (input.files && input.files[0]) {
     const reader = new FileReader();
@@ -88,7 +100,6 @@ function loadLogo(src){
   logo.src = src;
 }
 
-// Initial load
 loadLogo(document.getElementById("logoSelect").value);
 
 function draw(){
@@ -108,8 +119,12 @@ function draw(){
   ctx.fillStyle="white";
   let fullText = document.getElementById("title").value.toUpperCase();
   
+  // Using the custom font name here
+  const fontStyle = "bold 54pt 'BBCGillSans'";
+  const fontStyleLarge = "bold 72pt 'BBCGillSans'";
+
   if (fullText.length > 17) {
-    ctx.font="bold 54pt 'Gill Sans MT'";
+    ctx.font = fontStyle;
     let words = fullText.split(" ");
     let mid = Math.ceil(words.length / 2);
     let line1 = words.slice(0, mid).join(" ");
@@ -118,7 +133,7 @@ function draw(){
     ctx.fillText(line1, 700, 810);
     ctx.fillText(line2, 700, 890);
   } else {
-    ctx.font="bold 72pt 'Gill Sans MT'";
+    ctx.font = fontStyleLarge;
     ctx.fillText(fullText, 700, 880);
   }
 
