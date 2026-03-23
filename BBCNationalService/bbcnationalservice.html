@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BBC National Service - WOFF2 Edition</title>
+
+<style>
+html, body { 
+  margin: 0; padding: 0; background: #000; 
+  display: flex; height: 100vh; width: 100vw;
+  font-family: "Gill Sans", sans-serif; overflow: hidden; 
+  justify-content: center; align-items: center;
+}
+
+/* FLOATING OVERLAY CONTROL */
+.overlay-nav {
+  position: absolute; top: 20px; right: 20px; z-index: 100;
+  background: rgba(0, 0, 0, 0.75); padding: 12px 18px;
+  border-radius: 8px; border: 1px solid #444;
+  display: flex; gap: 10px; align-items: center;
+  backdrop-filter: blur(5px);
+}
+
+.overlay-nav label { color: #aaa; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; }
+
+select {
+  background: #111; color: #fff; border: 1px solid #666;
+  padding: 6px 12px; font-family: "Gill Sans", sans-serif; cursor: pointer;
+  outline: none;
+}
+
+.frame { 
+  width: min(100vw, calc(100vh * 4 / 3)); 
+  height: min(100vh, calc(100vw * 3 / 4)); 
+  aspect-ratio: 4/3; position: relative;
+}
+
+canvas { width: 100%; height: 100%; background: #000; }
+#v { display: none; }
+</style>
+</head>
+
+<body>
+
+<video id="v" src="video.mp4" loop muted autoplay playsinline></video>
+
+<div class="overlay-nav">
+  <label>Service:</label>
+  <select id="feed-selector" onchange="changeFeed()">
+    <option value="news">BBC News Headlines</option>
+    <option value="sport">BBC Sport Headlines</option>
+  </select>
+</div>
+
+<div class="frame">
+  <canvas id="c" width="1440" height="1080"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const video = document.getElementById("v");
+const W = 1440, H = 1080, contentX = 125; 
+
+// UPDATED: Using .woff2 files from your folder
+const fontRegular = new FontFace("BBCGill", "url(GIL_____.woff2)");
+const fontBold = new FontFace("BBCGillBold", "url(GILB____.woff2)");
+const bgImg = new Image();
+bgImg.src = 'background.png';
+
+let currentFullDate = "", currentTimeStr = "", footerText = "", currentMode = "news";
+let newsItems = [], currentStoryIndex = 0, secondsUntilSwitch = 30;
+let fadeAlpha = 1.0, isFading = false, oldStory = null, newStory = null;
+
+// FORCE VIDEO PLAY ON LOAD
+video.addEventListener('canplay', () => {
+    video.play().catch(error => {
+        console.log("Autoplay prevented by browser. User must interact first.");
+    });
+});
+
+function changeFeed() {
+    currentMode = document.getElementById('feed-selector').value;
+    footerText = (currentMode === 'sport') ? 
+        "For more information, go to the BBC Sport Website" : 
+        "For more information, go to the BBC News Website";
+    
+    currentStoryIndex = 0;
+    secondsUntilSwitch = 30;
+    fetchRSS();
+}
+
+async function fetchRSS() {
+    const url = currentMode === 'sport' ? "http://feeds.bbci.co.uk/sport/rss.xml" : "http://feeds.bbci.co.uk/news/rss.xml";
+    try {
+        const response = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${url}`);
+        const data = await response.json();
+        newsItems = data.items || [];
+        if(newsItems.length > 0) newStory = newsItems[0];
+    } catch (e) { console.error("Sync Error"); }
+}
+
+function rotateStories() {
+    secondsUntilSwitch--;
+    if (secondsUntilSwitch <= 0) {
+        if (newsItems.length > 1) {
+            oldStory = newsItems[currentStoryIndex];
+            currentStoryIndex = (currentStoryIndex + 1) % newsItems.length;
+            newStory = newsItems[currentStoryIndex];
+            fadeAlpha = 0;
+            isFading = true;
+        }
+        secondsUntilSwitch = 30;
+    }
+}
+
+function updateDateTime() {
+    const now = new Date();
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    
+    function getOrdinal(d) {
+        if (d > 3 && d < 21) return 'th';
+        switch (d % 10) {
+            case 1: return "st"; case 2: return "nd"; case 3: return "rd"; default: return "th";
+        }
+    }
+    currentFullDate = `${days[now.getDay()]} ${now.getDate()}${getOrdinal(now.getDate())} ${months[now.getMonth()]} ${now.getFullYear()}`;
+    currentTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight, alpha = 1.0) {
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const lines = text.split('\n');
+    lines.forEach(line => {
+        if (line.trim() === "") { y += lineHeight / 2; return; }
+        const words = line.split(" ");
+        let currentLine = "";
+        for (let n = 0; n < words.length; n++) {
+            const testLine = currentLine + words[n] + " ";
+            if (ctx.measureText(testLine).width > maxWidth && n > 0) {
+                ctx.fillText(currentLine, x, y);
+                currentLine = words[n] + " "; y += lineHeight;
+            } else { currentLine = testLine; }
+        }
+        ctx.fillText(currentLine, x, y); y += lineHeight;
+    });
+    ctx.restore();
+}
+
+function loop() {
+    ctx.clearRect(0, 0, W, H);
+    ctx.drawImage(video, 0, 0, W, H);
+    if (bgImg.complete) ctx.drawImage(bgImg, 0, 0, W, H);
+    
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 48px BBCGillBold";
+    ctx.fillText(currentFullDate, contentX, 205);
+    ctx.font = "bold 60px BBCGillBold";
+    ctx.fillText(currentMode === 'sport' ? "SPORT REEL:" : "NEWS REEL:", contentX, 320);
+
+    if (isFading) {
+        fadeAlpha += 0.02;
+        if (fadeAlpha >= 1.0) { fadeAlpha = 1.0; isFading = false; }
+    }
+
+    ctx.font = "42px BBCGill";
+    if (isFading && oldStory) {
+        wrapText(`${oldStory.title.toUpperCase()}\n\n${oldStory.description}`, contentX, 390, 1190, 52, 1.0 - fadeAlpha);
+        wrapText(`${newStory.title.toUpperCase()}\n\n${newStory.description}`, contentX, 390, 1190, 52, fadeAlpha);
+    } else if (newStory) {
+        wrapText(`${newStory.title.toUpperCase()}\n\n${newStory.description}`, contentX, 390, 1190, 52, 1.0);
+    }
+
+    ctx.font = "28px BBCGill";
+    ctx.fillText(footerText, contentX, 780);
+    ctx.font = "bold 50px BBCGillBold";
+    ctx.textAlign = "right";
+    ctx.fillText(currentTimeStr, 1315, 902); 
+    ctx.textAlign = "left";
+    requestAnimationFrame(loop);
+}
+
+async function init() {
+    try {
+        const loadedFonts = await Promise.all([fontRegular.load(), fontBold.load()]);
+        loadedFonts.forEach(f => document.fonts.add(f));
+    } catch (e) {
+        console.error("Font Load Failed:", e);
+    }
+    
+    updateDateTime();
+    setInterval(updateDateTime, 1000); 
+    setInterval(rotateStories, 1000);
+    
+    changeFeed(); 
+    
+    video.play().catch(() => {});
+    
+    requestAnimationFrame(loop);
+}
+
+window.onclick = () => { if (video.paused) video.play(); };
+
+init();
+</script>
+
+</body>
+</html>
