@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>BBC Presentation Menu Tool</title>
+<style>
+body {
+    margin: 0;
+    background: #000;
+    display: flex;
+    font-family: "Gill Sans MT", "Gill Sans", sans-serif;
+    color: white;
+    height: 100vh;
+    overflow: hidden;
+}
+
+#editor {
+    width: 360px;
+    background: #111;
+    padding: 18px;
+    height: 100vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    border-right: 1px solid #333;
+}
+
+input, select {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 8px;
+    background: #222;
+    color: white;
+    border: 1px solid #444;
+}
+
+button {
+    width: 100%;
+    padding: 8px;
+    margin-top: 6px;
+    background: #333;
+    border: 1px solid #555;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover { background: #444; }
+
+.row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.row input { flex: 1; }
+
+.remove {
+    width: 40px;
+    background: #700;
+    border: none;
+}
+
+#tabs {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.tab {
+    padding: 6px;
+    background: #222;
+    text-align: center;
+    cursor: pointer;
+    font-size: 10px;
+    border: 1px solid #333;
+}
+
+.tab.active { background: #555; }
+
+.frame {
+    flex: 1;
+    display: grid;
+    place-items: center;
+    background: #050505;
+}
+
+canvas {
+    max-width: 100%;
+    max-height: 95vh;
+    aspect-ratio: 4/3;
+    background: #000;
+}
+</style>
+</head>
+
+<body>
+
+<div id="editor">
+    <h2>BBC Menu Tool</h2>
+    <div id="tabs"></div>
+
+    <label>Day Title</label> <input id="dayTitle">
+    <label>Menu Vertical Position</label> <input type="range" id="menuY" min="150" max="700" value="320">
+
+    <label>Background</label> 
+    <select id="bgSelect">
+        <optgroup label="Standard BBC">
+            <option value="bbcobit.jpg">BBC Family</option>
+            <option value="bbcone.jpg">BBC One</option>
+            <option value="bbctwo.jpg">BBC Two</option>
+            <option value="bbcchoice.jpg">BBC Choice</option>
+            <option value="bbcknowledge.jpg">BBC Knowledge</option>
+        </optgroup>
+        <optgroup label="CBBC Backgrounds">
+            <option value="cbbcone.jpg">CBBC One</option>
+            <option value="cbbctwo.jpg">CBBC Two</option>
+            <option value="cbbcprime.jpg">CBBC Prime</option>
+            <option value="cbbcchoice.jpg">CBBC Choice</option>
+            <option value="cbbconchoice.jpg">CBBC on Choice</option>
+        </optgroup>
+    </select>
+
+    <label>
+        <input type="checkbox" id="safeToggle" style="width:auto;"> Show TV Safe Area
+    </label>
+
+    <hr style="border:0; border-top:1px solid #333; margin:15px 0;">
+
+    <h3>Programmes</h3>
+    <div id="rows"></div>
+    <button onclick="addRow()">+ Add Programme</button>
+
+    <hr style="border:0; border-top:1px solid #333; margin:20px 0;">
+
+    <button onclick="saveSchedule()" style="background:#224;">Save JSON</button> 
+    <button onclick="loadSchedule()">Load JSON</button>
+    <input type="file" id="loadFile" style="display:none">
+</div>
+
+<div class="frame">
+    <canvas id="menu" width="1440" height="1080"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById("menu");
+const ctx = canvas.getContext("2d");
+const rowsDiv = document.getElementById("rows");
+const tabsDiv = document.getElementById("tabs");
+
+let bg = new Image();
+bg.src = "bbcobit.jpg";
+bg.onload = draw;
+
+document.getElementById("bgSelect").onchange = function() { bg.src = this.value; draw(); };
+document.getElementById("menuY").oninput = draw;
+document.getElementById("dayTitle").oninput = function() {
+    titles[days[currentDay]] = this.value;
+    draw();
+};
+
+const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+let currentDay = 0;
+let schedules = {
+    Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [], Sunday: []
+};
+let titles = {
+    Monday: "MONDAY", Tuesday: "TUESDAY", Wednesday: "WEDNESDAY", Thursday: "THURSDAY",
+    Friday: "FRIDAY", Saturday: "SATURDAY", Sunday: "SUNDAY"
+};
+
+function renderTabs() {
+    tabsDiv.innerHTML = "";
+    days.forEach((day, i) => {
+        const tab = document.createElement("div");
+        tab.className = "tab" + (i === currentDay ? " active" : "");
+        tab.innerText = day.slice(0, 3).toUpperCase();
+        tab.onclick = () => {
+            currentDay = i;
+            renderTabs();
+            renderEditor();
+            draw();
+        };
+        tabsDiv.appendChild(tab);
+    });
+}
+
+function renderEditor() {
+    const day = days[currentDay];
+    document.getElementById("dayTitle").value = titles[day];
+    rowsDiv.innerHTML = "";
+    schedules[day].forEach((item, index) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        row.innerHTML = `
+            <input type="text" value="${item.time}" placeholder="Time" oninput="schedules['${day}'][${index}].time=this.value;draw()">
+            <input type="text" value="${item.show}" placeholder="Programme" oninput="schedules['${day}'][${index}].show=this.value;draw()">
+            <button class="remove" onclick="schedules['${day}'].splice(${index},1);renderEditor();draw()">X</button>
+        `;
+        rowsDiv.appendChild(row);
+    });
+}
+
+function addRow() {
+    schedules[days[currentDay]].push({time: "", show: ""});
+    renderEditor();
+    draw();
+}
+
+function wrapText(text, x, y, maxWidth, lineHeight) {
+    const words = text.split(" ");
+    let line = "";
+    for (let n = 0; n < words.length; n++) {
+        const test = line + words[n] + " ";
+        if (ctx.measureText(test).width > maxWidth && n > 0) {
+            ctx.fillText(line, x, y);
+            line = words[n] + " ";
+            y += lineHeight;
+        } else { line = test; }
+    }
+    ctx.fillText(line, x, y);
+}
+
+function draw() {
+    ctx.clearRect(0, 0, 1440, 1080);
+    
+    if (bg.complete) ctx.drawImage(bg, 0, 0, 1440, 1080);
+
+    const cbbcBgs = ["cbbcone.jpg", "cbbctwo.jpg", "cbbcprime.jpg", "cbbcchoice.jpg", "cbbconchoice.jpg"];
+    const currentBgFile = bg.src.split('/').pop();
+    const useBlackText = cbbcBgs.includes(currentBgFile);
+    const mainColor = useBlackText ? "black" : "white";
+
+    const day = days[currentDay];
+    ctx.fillStyle = mainColor;
+    ctx.textAlign = "center";
+    ctx.font = "bold 64pt 'Gill Sans MT', sans-serif";
+    ctx.fillText(titles[day], 720, 200);
+
+    let startY = Number(document.getElementById("menuY").value);
+    
+    schedules[day].forEach((item, i) => {
+        let y = startY + (i * 110);
+        const gap = 45;
+
+        ctx.font = "bold 48pt 'Gill Sans MT', sans-serif";
+        const timeWidth = ctx.measureText(item.time).width;
+
+        ctx.font = "48pt 'Gill Sans MT', sans-serif";
+        const showWidth = ctx.measureText(item.show).width;
+
+        const totalWidth = timeWidth + gap + showWidth;
+        const startX = 720 - (totalWidth / 2);
+
+        ctx.textAlign = "left";
+
+        ctx.font = "bold 48pt 'Gill Sans MT', sans-serif";
+        ctx.fillStyle = mainColor;
+        ctx.fillText(item.time, startX, y);
+
+        ctx.font = "48pt 'Gill Sans MT', sans-serif";
+        ctx.fillStyle = mainColor;
+        wrapText(item.show, startX + timeWidth + gap, y, 800, 55);
+    });
+
+    if (document.getElementById("safeToggle").checked) {
+        ctx.strokeStyle = useBlackText ? "rgba(0,0,0,0.5)" : "rgba(255,255,0,0.5)";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(144, 108, 1152, 864); 
+    }
+}
+
+function saveSchedule() {
+    const blob = new Blob([JSON.stringify({titles, schedules})], {type: "application/json"});
+    const link = document.createElement("a");
+    link.download = "bbc-menu.json";
+    link.href = URL.createObjectURL(blob);
+    link.click();
+}
+
+function loadSchedule() { document.getElementById("loadFile").click(); }
+
+document.getElementById("loadFile").addEventListener("change", function() {
+    const reader = new FileReader();
+    reader.onload = e => {
+        const data = JSON.parse(e.target.result);
+        titles = data.titles;
+        schedules = data.schedules;
+        renderTabs();
+        renderEditor();
+        draw();
+    };
+    reader.readAsText(this.files[0]);
+});
+
+renderTabs();
+renderEditor();
+// Final draw call to ensure it renders on start
+setTimeout(draw, 100);
+</script>
+</body>
+</html>
