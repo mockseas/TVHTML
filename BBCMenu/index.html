@@ -4,11 +4,54 @@
 <meta charset="UTF-8">
 <title>BBC Presentation Menu Tool</title>
 <style>
+/* FONT DEFINITIONS */
+@font-face {
+    font-family: 'Gill Sans MT Custom';
+    src: url('GIL_____.woff2') format('woff2');
+    font-weight: normal;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Gill Sans MT Custom';
+    src: url('GILB____.woff2') format('woff2');
+    font-weight: bold;
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Gill Sans MT Custom';
+    src: url('GILI____.woff2') format('woff2');
+    font-weight: normal;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: 'Gill Sans MT Custom';
+    src: url('GILBI___.woff2') format('woff2');
+    font-weight: bold;
+    font-style: italic;
+}
+
+@font-face {
+    font-family: 'Gill Sans MT Custom';
+    src: url('GILC____.woff2') format('woff2');
+    font-weight: 300; /* Light/Condensed mapping */
+    font-style: normal;
+}
+
+@font-face {
+    font-family: 'Gill Sans MT Custom';
+    src: url('GLSNECB.woff2') format('woff2');
+    font-weight: 900; /* Extra Bold mapping */
+    font-style: normal;
+}
+
 body {
     margin: 0;
     background: #000;
     display: flex;
-    font-family: "Gill Sans MT", "Gill Sans", sans-serif;
+    font-family: "Gill Sans MT Custom", "Gill Sans MT", sans-serif;
     color: white;
     height: 100vh;
     overflow: hidden;
@@ -147,6 +190,9 @@ const ctx = canvas.getContext("2d");
 const rowsDiv = document.getElementById("rows");
 const tabsDiv = document.getElementById("tabs");
 
+// Main font name used for drawing
+const fontName = "'Gill Sans MT Custom'";
+
 let bg = new Image();
 bg.src = "bbcobit.jpg";
 bg.onload = draw;
@@ -233,19 +279,21 @@ function draw() {
     const day = days[currentDay];
     ctx.fillStyle = mainColor;
     ctx.textAlign = "center";
-    ctx.font = "bold 64pt 'Gill Sans MT', sans-serif";
-    ctx.fillText(titles[day], 720, 200);
+    ctx.font = `bold 64pt ${fontName}`;
+    ctx.fillText(titles[day], 720, 220);
 
     let startY = Number(document.getElementById("menuY").value);
     
     schedules[day].forEach((item, i) => {
-        let y = startY + (i * 110);
-        const gap = 45;
+        let y = startY + (i * 120);
+        const gap = 50;
 
-        ctx.font = "bold 48pt 'Gill Sans MT', sans-serif";
+        // Use BOLD for Time
+        ctx.font = `bold 48pt ${fontName}`;
         const timeWidth = ctx.measureText(item.time).width;
 
-        ctx.font = "48pt 'Gill Sans MT', sans-serif";
+        // Use REGULAR for Programme
+        ctx.font = `48pt ${fontName}`;
         const showWidth = ctx.measureText(item.show).width;
 
         const totalWidth = timeWidth + gap + showWidth;
@@ -253,13 +301,15 @@ function draw() {
 
         ctx.textAlign = "left";
 
-        ctx.font = "bold 48pt 'Gill Sans MT', sans-serif";
+        // Draw Time (Bold)
+        ctx.font = `bold 48pt ${fontName}`;
         ctx.fillStyle = mainColor;
         ctx.fillText(item.time, startX, y);
 
-        ctx.font = "48pt 'Gill Sans MT', sans-serif";
+        // Draw Programme (Regular)
+        ctx.font = `48pt ${fontName}`;
         ctx.fillStyle = mainColor;
-        wrapText(item.show, startX + timeWidth + gap, y, 800, 55);
+        wrapText(item.show, startX + timeWidth + gap, y, 800, 65);
     });
 
     if (document.getElementById("safeToggle").checked) {
@@ -292,10 +342,12 @@ document.getElementById("loadFile").addEventListener("change", function() {
     reader.readAsText(this.files[0]);
 });
 
-renderTabs();
-renderEditor();
-// Final draw call to ensure it renders on start
-setTimeout(draw, 100);
+// Use the web font loader pattern to ensure fonts are ready before first draw
+document.fonts.ready.then(function() {
+    renderTabs();
+    renderEditor();
+    draw();
+});
 </script>
 </body>
 </html>
