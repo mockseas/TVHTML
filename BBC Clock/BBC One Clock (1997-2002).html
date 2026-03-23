@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<!-- saved from url=(0061)https://www.mcmweb.co.uk/project_pendulum/bbc1_1997-2002.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BBC One Clock (1997-2002)</title>
+<style>
+  :root{ --w:1440; --h:1080; }
+  html,body{
+    height:100%; margin:0; background:#000;
+    display:grid; place-items:center;
+  }
+  .frame{
+    position:relative; background:#000; overflow:hidden;
+    width:min(100vw, calc(100vh * 4 / 3));
+    height:min(100vh, calc(100vw * 3 / 4));
+    aspect-ratio:4 / 3;
+  }
+  #clock{
+    width:100%;
+    height:100%;
+    display:block;
+    background:#000;
+  }
+</style>
+</head>
+<body>
+  <div class="frame" id="frame">
+    <canvas id="clock" width="1440" height="1080"></canvas>
+  </div>
+
+<script>
+(() => {
+  const W = 1440, H = 1080;
+  const canvas = document.getElementById('clock');
+  const ctx    = canvas.getContext('2d');
+
+  // --- Query string reader ---
+  function getQueryParam(name) {
+    return new URLSearchParams(window.location.search).get(name);
+  }
+
+  // Handle ?time=HH:MM[:SS]
+  const fixedTimeParam = getQueryParam("time");
+  let startDate = null, loadTime = null;
+  if (fixedTimeParam) {
+    const parts = fixedTimeParam.split(":").map(Number);
+    if (parts.length >= 2) {
+      startDate = new Date();
+      startDate.setHours(parts[0], parts[1], parts[2] || 0, 0);
+      loadTime = Date.now();
+    }
+  }
+
+  // --- Clock config ---
+  const cfg = {
+    colour: "#dedede",   // BBC1 white
+    cx: W * 0.500,
+    cy: 468,
+    faceR: 255,
+    barLen: 66,
+    barTh1: 14,
+    barTh12: 5,
+    hubOuterR: 18, hubRingW: 14,
+    hourLen: 170, hourW: 14,
+    minLen: 246, minW: 14,
+    secLen: 246, secW: 8, secTail: 70,
+
+    tick: {
+      hold: 0.00,
+      move: 0.00,
+      settle: 0.0,
+      judderAmp: 0.00,
+      judderFreq: 0.0,
+      judderDamp: 0
+    },
+
+    hourShadow: { blur: 0, offsetX: 0, offsetY: 0 },
+    minShadow:  { blur: 0, offsetX: 0, offsetY: 0 },
+    secShadow:  { blur: 0, offsetX: 0, offsetY: 0 },
+
+    phosphorTrails: 0,
+    phosphorFade: 0.0,
+    phosphorBlur: 0.0
+  };
+
+  const TAU = Math.PI*2, HALF_PI = Math.PI/2;
+
+// ---- Marker style ----
+function drawMarkers(ctx, cx, cy, c, color) {
+  ctx.fillStyle = color;
+
+  for (let i = 0; i < 12; i++) {
+    const a  = (i / 12) * TAU - HALF_PI;
+    const ux = Math.cos(a), uy = Math.sin(a);
+    const px = cx + ux * c.faceR;
+    const py = cy + uy * c.faceR;
+
+    // Dots at 1,3,5,7,9,11
+    if ([1, 3, 5, 7, 9, 11].includes(i)) {
+      ctx.beginPath();
+      ctx.arc(px, py, 10, 0, TAU);
+      ctx.fill();
+      continue;
+    }
+
+    // Rectangles at 12,2,4,6,8,10 — radial, thin style
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(a);
+
+    const len = (i === 0 || i === 6) ? c.barLen * 0.7 : c.barLen * 0.7;
+    const w   = c.barTh1; // same thin thickness for all
+
+    ctx.fillRect(-len / 2, -w / 2, len, w);
+    ctx.restore();
+  }
+}
+
+
+  function drawRectHand(ctx, cx, cy, ang, len, w, color){
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+    ctx.fillStyle = color; ctx.fillRect(0, -w/2, len, w); ctx.restore();
+  }
+
+  function drawSecond(ctx, cx, cy, ang, len, tail, w, color,
+                      shadowAlpha, shadowBlur, shadowOffsetX, shadowOffsetY){
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(ang);
+    ctx.shadowColor = `rgba(0,0,0,${shadowAlpha})`;
+    ctx.shadowBlur = shadowBlur;
+    ctx.shadowOffsetX = shadowOffsetX;
+    ctx.shadowOffsetY = shadowOffsetY;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'butt';
+    ctx.beginPath();
+    ctx.moveTo(-tail, 0);
+    ctx.lineTo(len, 0);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawHub(ctx, cx, cy, outerR, ringW, color){
+    ctx.save(); ctx.translate(cx, cy);
+    ctx.strokeStyle = color; ctx.lineWidth = ringW;
+    ctx.beginPath(); ctx.arc(0, 0, outerR, 0, TAU); ctx.stroke();
+    ctx.fillStyle = "#00081c";
+    ctx.beginPath(); ctx.arc(0, 0, outerR-ringW/2, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // ---- Background image ----
+  let bg = new Image();
+  bg.src = "bbc1_1997-2002.jpg";
+  bg.onload = () => loop();
+
+  // ---- Tick with backwards overshoot judder ----
+  function tickStep(t){
+    const tk = cfg.tick;
+    const hold   = tk.hold;
+    const move   = tk.move;
+    const settle = tk.settle;
+    const t1 = hold;
+    const t2 = hold + move;
+
+    if (t < t1) return 0;
+    if (t < t2) return 1;
+
+    if (settle > 0){
+      const v = Math.min(1, (t - t2) / settle);
+      const wobble = -tk.judderAmp * Math.exp(-tk.judderDamp * v) +
+                     (tk.judderAmp * 0.6) *
+                     Math.sin(v * Math.PI * tk.judderFreq) *
+                     Math.exp(-tk.judderDamp * v);
+      return 1 + wobble;
+    }
+    return 1;
+  }
+
+  // ---- Frame draw ----
+  function drawFrame(ctxOut){
+    ctxOut.clearRect(0,0,W,H);
+    if(bg.complete) ctxOut.drawImage(bg, 0, 0, W, H);
+
+    let now;
+    if (startDate && loadTime) {
+      now = new Date(startDate.getTime() + (Date.now() - loadTime));
+    } else {
+      now = new Date();
+    }
+
+    const ms  = now.getMilliseconds();
+    const sec = now.getSeconds(), min = now.getMinutes(), hr = now.getHours()%12;
+
+    const p = ms / 1000;
+    const step = tickStep(p);
+    const stepForMinHour = Math.min(step, 1);
+
+    const aSec  = ((sec + step)/60) * TAU - HALF_PI;
+    const aMin  = ((min + (sec + stepForMinHour)/60)/60) * TAU - HALF_PI;
+    const aHour = ((hr  + (min + (sec + stepForMinHour)/60)/60)/12) * TAU - HALF_PI;
+
+    const CX = cfg.cx, CY = cfg.cy;
+
+    drawMarkers(ctxOut, CX, CY, cfg, cfg.colour);
+
+    drawRectHand(ctxOut, CX, CY, aHour, cfg.hourLen, cfg.hourW, cfg.colour);
+    drawRectHand(ctxOut, CX, CY, aMin, cfg.minLen, cfg.minW, cfg.colour);
+
+    // second hand with trails
+    for(let i=cfg.phosphorTrails; i>=1; i--){
+      const trailStep = tickStep(p - i*0.02);
+      const aTrail = ((sec + trailStep)/60) * TAU - HALF_PI;
+      const alpha = cfg.phosphorFade * (1 - i/cfg.phosphorTrails);
+      ctxOut.save();
+      ctxOut.globalAlpha = alpha;
+      ctxOut.filter = `blur(${cfg.phosphorBlur}px)`;
+      drawSecond(ctxOut, CX, CY, aTrail, cfg.secLen, cfg.secTail, cfg.secW,
+                 cfg.colour, 0.5, cfg.secShadow.blur,
+                 cfg.secShadow.offsetX, cfg.secShadow.offsetY);
+      ctxOut.restore();
+    }
+
+    drawSecond(ctxOut, CX, CY, aSec, cfg.secLen, cfg.secTail, cfg.secW,
+               cfg.colour, 0.5, cfg.secShadow.blur,
+               cfg.secShadow.offsetX, cfg.secShadow.offsetY);
+
+    drawHub(ctxOut, CX, CY, cfg.hubOuterR, cfg.hubRingW, cfg.colour);
+  }
+
+  function loop(){
+    drawFrame(ctx);
+    requestAnimationFrame(loop);
+  }
+})();
+</script>
+
+<script>
+(() => {
+  let recorder, chunks = [];
+  window.addEventListener("message", (e) => {
+    if (e.data.action === "startRec") {
+      const canvas = document.getElementById("clock");
+      const stream = canvas.captureStream(50);
+      recorder = new MediaRecorder(stream, {
+        mimeType: "video/webm;codecs=vp9",
+        videoBitsPerSecond: 5000000
+      });
+      recorder.ondataavailable = ev => { if (ev.data.size > 0) chunks.push(ev.data); };
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "bbc_one_1997-2002.webm";
+        a.click();
+        URL.revokeObjectURL(url);
+        chunks = [];
+      };
+      chunks = [];
+      recorder.start();
+    }
+    if (e.data.action === "stopRec" && recorder) {
+      recorder.stop();
+    }
+  });
+})();
+</script>
+
+
+</body></html>
