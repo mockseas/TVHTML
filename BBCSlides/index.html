@@ -6,9 +6,16 @@
 <style>
 /* Linking your specific font files */
 @font-face {
-    font-family: 'BBCGillSans';
-    src: url('GILB____.woff2') format('woff2'); /* Using the Extra Bold file for the title */
+    font-family: 'BBCGillBold';
+    /* This must match your filename on GitHub exactly */
+    src: url('GILB____.woff2') format('woff2'); 
     font-weight: bold;
+    font-style: normal;
+}
+
+/* Now apply it to your text */
+.label, h1, .title {
+    font-family: 'BBCGillBold', Arial, sans-serif;
 }
 
 body{ margin:0; background:#000; display:flex; font-family: "BBCGillSans", "Gill Sans MT", sans-serif; color:white; height:100vh; overflow:hidden; }
