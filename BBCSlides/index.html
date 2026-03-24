@@ -4,29 +4,16 @@
 <meta charset="UTF-8">
 <title>BBC Programme Slide Tool</title>
 <style>
-/* Linking your specific font files */
-@font-face {
-    font-family: 'BBCGillBold';
-    /* This must match your filename on GitHub exactly */
-    src: url('GILB____.woff2') format('woff2'); 
-    font-weight: bold;
-    font-style: normal;
-}
-
-/* Now apply it to your text */
-.label, h1, .title {
-    font-family: 'BBCGillBold', Arial, sans-serif;
-}
-
-body{ margin:0; background:#000; display:flex; font-family: "BBCGillSans", "Gill Sans MT", sans-serif; color:white; height:100vh; overflow:hidden; }
+body{ margin:0; background:#000; display:flex; font-family: sans-serif; color:white; height:100vh; overflow:hidden; }
 #editor{ width:320px; background:#111; padding:15px; height:100vh; overflow-y:auto; box-sizing:border-box; border-right: 1px solid #333; }
-label{ display:block; margin-top:10px; color:#aaa; font-size:0.8em; }
-input, select{ width:100%; padding:8px; margin-bottom:10px; background:#222; border:1px solid #444; color:white; box-sizing:border-box; }
-.file-btn{ background:#444; color:white; padding:8px; text-align:center; cursor:pointer; display:block; margin-bottom:10px; border:1px solid #555; font-weight:bold; }
-.file-btn:hover{ background:#555; }
-.frame{ flex:1; display:grid; place-items:center; background:#000; }
-canvas{ width:100%; max-width:1200px; aspect-ratio:1400/1080; border:1px solid #222; }
-#status{ font-size: 0.8em; padding: 10px; margin-top: 5px; border-radius: 3px; text-align: center; font-weight:bold; }
+h2 { font-size: 1.2rem; border-bottom: 1px solid #333; padding-bottom: 10px; }
+label{ display:block; margin-top:10px; color:#aaa; font-size:0.8em; text-transform: uppercase; letter-spacing: 1px; }
+input, select{ width:100%; padding:8px; margin-bottom:10px; background:#222; border:1px solid #444; color:white; box-sizing:border-box; outline: none; }
+.file-btn{ background:#e11b22; color:white; padding:10px; text-align:center; cursor:pointer; display:block; margin-bottom:10px; border-radius: 4px; font-weight:bold; font-size: 0.8em; }
+.file-btn:hover{ background:#ff1f25; }
+.frame{ flex:1; display:grid; place-items:center; background:#000; padding: 20px; }
+canvas{ width:100%; max-width:1000px; aspect-ratio:1400/1080; border:1px solid #222; background: #050505; }
+#status{ font-size: 0.75em; padding: 10px; margin-top: 5px; border-radius: 3px; text-align: center; font-weight:bold; }
 .ok{ background: #050; color: #afa; }
 .err{ background: #500; color: #faa; }
 </style>
@@ -54,6 +41,8 @@ canvas{ width:100%; max-width:1200px; aspect-ratio:1400/1080; border:1px solid #
   <option value="bbcworld.png">BBC World</option>
 </select>
 <div id="status">Checking logo...</div>
+
+<p style="font-size: 0.7em; color: #666; margin-top: 20px;">Ensure fonts are in the /BBCMenu/ folder.</p>
 </div>
 
 <div class="frame">
@@ -65,17 +54,26 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const statusDiv = document.getElementById("status");
 
+// --- FONT LOADING ---
+// Points to your BBCMenu folder
+const bbcFont = new FontFace('BBCGillBold', 'url(../BBCMenu/GILB____.woff2)');
+
+bbcFont.load().then(function(loadedFont) {
+    document.fonts.add(loadedFont);
+    console.log("BBC Font Loaded");
+    draw(); 
+}).catch(function(error) {
+    console.error("Font error: " + error);
+    statusDiv.innerText = "Font Error: Check BBCMenu folder";
+    statusDiv.className = "err";
+});
+
 let bg = new Image();
 bg.src = "weakestlink.jpg"; 
 bg.onload = draw;
 
 let logo = new Image();
 let logoLoaded = false;
-
-// Ensure font is loaded before drawing
-document.fonts.ready.then(() => {
-    draw();
-});
 
 function uploadBG(input) {
   if (input.files && input.files[0]) {
@@ -107,31 +105,36 @@ function loadLogo(src){
   logo.src = src;
 }
 
+// Initial load
 loadLogo(document.getElementById("logoSelect").value);
 
 function draw(){
   ctx.clearRect(0,0,1400,1080);
   
+  // 1. Draw Background
   if(bg.complete) {
     ctx.drawImage(bg,0,0,1400,1080);
   }
 
+  // 2. Draw Bottom Gradient (Standard 2001 look)
   const grad = ctx.createLinearGradient(0, 600, 0, 1080);
   grad.addColorStop(0, "rgba(0, 0, 0, 0)");
   grad.addColorStop(1, "rgba(0, 0, 0, 0.85)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 600, 1400, 480);
 
+  // 3. Draw Text
   ctx.textAlign="center";
   ctx.fillStyle="white";
   let fullText = document.getElementById("title").value.toUpperCase();
   
-  // Using the custom font name here
-  const fontStyle = "bold 54pt 'BBCGillSans'";
-  const fontStyleLarge = "bold 72pt 'BBCGillSans'";
-
+  // Set tight letter spacing if browser supports it
+  if (ctx.letterSpacing !== undefined) {
+      ctx.letterSpacing = "-2px";
+  }
+  
   if (fullText.length > 17) {
-    ctx.font = fontStyle;
+    ctx.font="700 54pt BBCGillBold";
     let words = fullText.split(" ");
     let mid = Math.ceil(words.length / 2);
     let line1 = words.slice(0, mid).join(" ");
@@ -140,10 +143,11 @@ function draw(){
     ctx.fillText(line1, 700, 810);
     ctx.fillText(line2, 700, 890);
   } else {
-    ctx.font = fontStyleLarge;
+    ctx.font="700 72pt BBCGillBold";
     ctx.fillText(fullText, 700, 880);
   }
 
+  // 4. Draw Channel Logo
   if(logoLoaded){
     ctx.drawImage(logo, 0, -20, 1400, 1080);
   }
